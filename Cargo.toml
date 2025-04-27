@@ -1,0 +1,2 @@
+[workspace]
+members = ["binary", "game_engine", "render_engine"]
