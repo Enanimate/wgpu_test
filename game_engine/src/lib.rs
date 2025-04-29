@@ -1,6 +1,6 @@
 use std::{mem::MaybeUninit, sync::Arc};
 use library::state::State;
-use winit::{application::ApplicationHandler, event::{ElementState, KeyEvent, WindowEvent}, event_loop::{ActiveEventLoop, ControlFlow, EventLoop}, keyboard::PhysicalKey, window::{Window, WindowId}};
+use winit::{application::ApplicationHandler, event::{ElementState, KeyEvent, WindowEvent}, event_loop::{ActiveEventLoop, ControlFlow, EventLoop}, window::{Window, WindowId}};
 pub use winit::keyboard::KeyCode;
 
 pub mod app;
@@ -55,12 +55,14 @@ impl GameLoop {
             match event {
                 WindowEvent::KeyboardInput {event: KeyEvent{ physical_key, state, ..}, ..}
                     => {
-                        for capture in self.capture_events.unwrap().inputs {
-                            if *physical_key == capture.key || *state == ElementState::Released {
-
+                        let mut handled = false;
+                        for capture in self.capture_events.clone().unwrap().inputs {
+                            if *physical_key == capture.key && *state == ElementState::Released {
+                                (capture.function)();
+                                handled = true;
                             }
                         }
-                    return true;
+                    return handled;
                 }
                 _ => false
             }
