@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use wgpu::{util::DeviceExt, RenderPipelineDescriptor};
-use winit::{event, window::Window};
+use winit::window::Window;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]

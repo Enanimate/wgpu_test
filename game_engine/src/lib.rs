@@ -1,7 +1,6 @@
-use std::{mem::MaybeUninit, slice::SliceIndex};
-
-use app::App;
-use winit::{event::{ElementState, KeyEvent, WindowEvent}, event_loop::{ControlFlow, EventLoop}, keyboard::PhysicalKey};
+use std::{mem::MaybeUninit, sync::Arc};
+use library::state::State;
+use winit::{application::ApplicationHandler, event::{ElementState, KeyEvent, WindowEvent}, event_loop::{ActiveEventLoop, ControlFlow, EventLoop}, keyboard::PhysicalKey, window::{Window, WindowId}};
 pub use winit::keyboard::KeyCode;
 
 pub mod app;
@@ -35,46 +34,33 @@ impl ToCaptureList for &[CaptureInput] {
     }
 }
 
-#[derive(Clone)]
+#[derive(Default)]
 pub struct GameLoop {
-    capture_events: Option<CaptureList>
+    capture_events: Option<CaptureList>,
+    state: Option<State>
 }
 
 impl GameLoop {
     pub fn new() -> Self {
         env_logger::init();
 
-        let event_loop = EventLoop::new().unwrap();
-        event_loop.set_control_flow(ControlFlow::Poll);
-    
-        let gameloop = Self {
-            capture_events: None
-        };
-
-        let mut app = App::default();
-        App::init(&mut app, &gameloop);
-        
-        event_loop.run_app(&mut app).unwrap();
-
-        return gameloop;
+        Self {
+            capture_events: None,
+            state: Default::default()
+        }
     }
 
-    pub fn inputs(&mut self, event: &WindowEvent) -> bool {
+    pub fn inputs(&self, event: &WindowEvent) -> bool {
         if self.capture_events.is_some() {
             match event {
-                WindowEvent::KeyboardInput {
-                    event:
-                        KeyEvent {
-                            state,
-                            physical_key: PhysicalKey::Code(KeyCode::KeyE),
-                            ..
-                        },
-                    ..
-                } => {
-                    if *state == ElementState::Released {
-                        println!("TEST");
-                    }
-                    true
+                WindowEvent::KeyboardInput {event: KeyEvent{ physical_key, state, ..}, ..}
+                    => {
+                        for capture in self.capture_events.unwrap().inputs {
+                            if *physical_key == capture.key || *state == ElementState::Released {
+
+                            }
+                        }
+                    return true;
                 }
                 _ => false
             }
@@ -85,11 +71,58 @@ impl GameLoop {
 }
 
 pub trait Events {
-    fn capture_events(&mut self, function: fn() -> CaptureList);
+    fn capture_events(&mut self, function: fn() -> CaptureList) -> &mut Self;
+    fn run(&mut self);
 }
 
 impl Events for GameLoop {
-    fn capture_events(&mut self, function: fn() -> CaptureList) {
+    fn capture_events(&mut self, function: fn() -> CaptureList) -> &mut Self {
+        println!("flag2");
         self.capture_events = Some(function());
+        return self
+    }
+    fn run(&mut self) {
+        let event_loop = EventLoop::new().unwrap();
+        event_loop.set_control_flow(ControlFlow::Poll);
+        event_loop.run_app(self).unwrap();
+    }
+}
+
+impl ApplicationHandler for GameLoop {
+    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        // Create window object
+        let window = Arc::new(
+            event_loop
+                .create_window(Window::default_attributes())
+                .unwrap(),
+        );
+
+        let state = pollster::block_on(State::new(window.clone()));
+        self.state = Some(state);
+
+        window.request_redraw();
+    }
+
+    fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
+        if !self.inputs(&event) {
+            let state = self.state.as_mut().unwrap();
+            match event {
+                WindowEvent::CloseRequested => {
+                    println!("The close button was pressed; stopping");
+                    event_loop.exit();
+                }
+                WindowEvent::RedrawRequested => {
+                    state.render();
+                    // Emits a new redraw requested event.
+                    state.get_window().request_redraw();
+                }
+                WindowEvent::Resized(size) => {
+                    // Reconfigures the size of the surface. We do not re-render
+                    // here as this event is always followed up by redraw request.
+                    state.resize(size);
+                }
+                _ => (),
+            }
+        } 
     }
 }

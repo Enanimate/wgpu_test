@@ -1,4 +1,4 @@
-use game_engine::{app::App, CaptureInput, CaptureList, Events, GameLoop, ToCaptureList};
+use game_engine::{CaptureInput, CaptureList, Events, GameLoop, ToCaptureList};
 
 fn inputs() -> CaptureList {
     [
@@ -13,5 +13,6 @@ fn test() {
 
 fn main() {
     GameLoop::new()
-        .capture_events(inputs);
+        .capture_events(inputs)
+        .run();
 }
