@@ -1,6 +1,8 @@
 use std::sync::Arc;
-use wgpu::{util::DeviceExt, RenderPipelineDescriptor};
+use wgpu::{util::DeviceExt, BufferUsages};
 use winit::window::Window;
+
+use crate::methods::CreateRenderPipeline;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -23,9 +25,17 @@ impl Vertex {
 }
 
 const VERTICES: &[Vertex] = &[
-    Vertex { position: [0.5, -0.5, 0.0] },
-    Vertex { position: [0.0, 0.5, 0.0] },
-    Vertex { position: [-0.5, -0.5, 0.0] },
+    Vertex { position: [-0.0868241, 0.49240386, 0.0] },
+    Vertex { position: [-0.49513406, 0.06958647, 0.0] },
+    Vertex { position: [-0.21918549, -0.44939706, 0.0] },
+    Vertex { position: [0.35966998, -0.3473291, 0.0] },
+    Vertex { position: [0.44147372, 0.2347359, 0.0] }, 
+];
+
+const INDICES: &[u16] = &[
+    0, 1, 4,
+    1, 2, 4,
+    2, 3, 4,
 ];
 
 pub struct State {
@@ -37,7 +47,8 @@ pub struct State {
     surface_format: wgpu::TextureFormat,
     render_pipeline: wgpu::RenderPipeline,
     vertex_buffer: wgpu::Buffer,
-    num_vertices: u32,
+    index_buffer: wgpu::Buffer,
+    num_indices: u32,
 }
 
 impl State {
@@ -68,56 +79,29 @@ impl State {
             .await
             .unwrap();
 
-        let shader = device.create_shader_module(wgpu::include_wgsl!("shaders/shader.wgsl"));
-
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Vertex Buffer"),
             contents: bytemuck::cast_slice(VERTICES),
             usage: wgpu::BufferUsages::VERTEX,
         });
 
-        let render_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("Render Pipeline Layout"),
-            bind_group_layouts: &[],
-            push_constant_ranges: &[],
-        });
+        let index_buffer = device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("Index Buffer"),
+                contents: bytemuck::cast_slice(INDICES),
+                usage: BufferUsages::INDEX,
+            }
+        );
 
-        let render_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
-            label: Some("Render Pipeline"),
-            layout: Some(&render_pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: Some("vs_main"),
-                compilation_options: Default::default(),
-                buffers: &[Vertex::desc()],
-            },
-            primitive: wgpu::PrimitiveState { 
-                topology: wgpu::PrimitiveTopology::TriangleList, 
-                strip_index_format: None, 
-                front_face: wgpu::FrontFace::Ccw, 
-                cull_mode: Some(wgpu::Face::Back), 
-                unclipped_depth: false, 
-                polygon_mode: wgpu::PolygonMode::Fill, 
-                conservative: false 
-            },
-            depth_stencil: None,
-            multisample: wgpu::MultisampleState::default(),
-            fragment: Some(wgpu::FragmentState { 
-                module: &shader, 
-                entry_point: Some("fs_main"), 
-                compilation_options: Default::default(), 
-                targets: &[Some(wgpu::ColorTargetState { 
-                    format: surface_format, 
-                    blend: Some(wgpu::BlendState::REPLACE), 
-                    write_mask: wgpu::ColorWrites::ALL 
-                })] 
-            }),
-            multiview: None,
-            cache: None,
-        });
+        let num_indices = INDICES.len() as u32;
+
+        let render_pipeline = CreateRenderPipeline::new(&device)
+            .set_shader_module("shader.wgsl", "vs_main", "fs_main")
+            .set_surface_format(surface_format)
+            .add_vertex_buffer(Vertex::desc())
+            .build("Render Pipeline");
 
         let size = window.inner_size();
-        let num_vertices = VERTICES.len() as u32;
 
         let state = State {
             window,
@@ -128,7 +112,8 @@ impl State {
             surface_format,
             render_pipeline,
             vertex_buffer,
-            num_vertices
+            index_buffer,
+            num_indices
         };
 
         // Configure surface for the first time
@@ -201,7 +186,8 @@ impl State {
         // If you wanted to call any drawing commands, they would go here.
         renderpass.set_pipeline(&self.render_pipeline);
         renderpass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-        renderpass.draw(0..self.num_vertices, 0..1);
+        renderpass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+        renderpass.draw_indexed(0..self.num_indices, 0, 0..1);
         // End the renderpass.
         drop(renderpass);
 
